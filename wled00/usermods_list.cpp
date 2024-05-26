@@ -230,6 +230,11 @@
   #include "../usermods/INA226_v2/usermod_ina226.h"
 #endif
 
+
+#ifdef USERMOD_RCRECEIVER
+  #include "../usermods/usermod_v2_rcreceiver/usermod_v2_rcreceiver.h"
+#endif
+
 void registerUsermods()
 {
 /*
@@ -445,5 +450,9 @@ void registerUsermods()
 
   #ifdef USERMOD_INA226
   usermods.add(new UsermodINA226());
+  #endif
+
+  #ifdef USERMOD_RCRECEIVER
+  usermods.add(new UsermodRCReceiver());
   #endif
 }

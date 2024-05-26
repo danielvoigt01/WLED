@@ -181,6 +181,7 @@
 #define USERMOD_ID_BME68X                49     //Usermod "usermod_bme68x.h
 #define USERMOD_ID_INA226                50     //Usermod "usermod_ina226.h"
 #define USERMOD_ID_AHT10                 51     //Usermod "usermod_aht10.h"
+#define USERMOD_ID_RCRECEIVER            52     //Usermod "usermod_rcreceiver.h"
 
 //Access point behavior
 #define AP_BEHAVIOR_BOOT_NO_CONN          0     //Open AP when no connection after boot
