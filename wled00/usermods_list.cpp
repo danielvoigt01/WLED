@@ -235,6 +235,10 @@
   #include "../usermods/usermod_v2_rcreceiver/usermod_v2_rcreceiver.h"
 #endif
 
+#ifdef USERMOD_LD2410
+#include "../usermods/LD2410_v2/usermod_ld2410.h"
+#endif
+
 void registerUsermods()
 {
 /*
@@ -454,5 +458,9 @@ void registerUsermods()
 
   #ifdef USERMOD_RCRECEIVER
   usermods.add(new UsermodRCReceiver());
+  #endif
+  
+  #ifdef USERMOD_LD2410
+  usermods.add(new LD2410Usermod());
   #endif
 }

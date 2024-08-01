@@ -336,14 +336,14 @@ static const char _data_FX_MODE_DYNAMIC_SMOOTH[] PROGMEM = "Dynamic Smooth@!,!;;
  */
 uint16_t mode_breath(void) {
   unsigned var = 0;
-  unsigned counter = (strip.now * ((SEGMENT.speed >> 3) +10));
-  counter = ((counter >> 2) + (counter >> 4)) & 0xFFFFU; //0-16384 + 0-2048
+  unsigned counter = (strip.now * ((SEGMENT.speed >> 3) +10)) & 0xFFFFU;
+  counter = (counter >> 2) + (counter >> 4); //0-16384 + 0-2048
   if (counter < 16384) {
     if (counter > 8192) counter = 8192 - (counter - 8192);
     var = sin16(counter) / 103; //close to parabolic in range 0-8192, max val. 23170
   }
 
-  uint8_t lum = 30 + var;
+  unsigned lum = 30 + var;
   for (int i = 0; i < SEGLEN; i++) {
     SEGMENT.setPixelColor(i, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(i, true, PALETTE_SOLID_WRAP, 0), lum));
   }
@@ -358,7 +358,7 @@ static const char _data_FX_MODE_BREATH[] PROGMEM = "Breathe@!;!,!;!;01";
  */
 uint16_t mode_fade(void) {
   unsigned counter = (strip.now * ((SEGMENT.speed >> 3) +10));
-  uint8_t lum = triwave16(counter) >> 8;
+  unsigned lum = triwave16(counter) >> 8;
 
   for (int i = 0; i < SEGLEN; i++) {
     SEGMENT.setPixelColor(i, color_blend(SEGCOLOR(1), SEGMENT.color_from_palette(i, true, PALETTE_SOLID_WRAP, 0), lum));
@@ -1779,8 +1779,8 @@ typedef struct Oscillator {
 /  Oscillating bars of color, updated with standard framerate
 */
 uint16_t mode_oscillate(void) {
-  unsigned numOscillators = 3;
-  unsigned dataSize = sizeof(oscillator) * numOscillators;
+  constexpr unsigned numOscillators = 3;
+  constexpr unsigned dataSize = sizeof(oscillator) * numOscillators;
 
   if (!SEGENV.allocateData(dataSize)) return mode_static(); //allocation failed
 
@@ -2103,17 +2103,20 @@ uint16_t mode_fire_2012() {
     }
   };
 
-  for (int stripNr=0; stripNr<strips; stripNr++)
+  for (unsigned stripNr=0; stripNr<strips; stripNr++)
     virtualStrip::runStrip(stripNr, &heat[stripNr * SEGLEN], it);
 
-  if (SEGMENT.is2D()) SEGMENT.blur(32);
+  if (SEGMENT.is2D()) {
+    uint8_t blurAmount = SEGMENT.custom2 >> 2;
+    SEGMENT.blur(blurAmount);
+  }
 
   if (it != SEGENV.step)
     SEGENV.step = it;
 
   return FRAMETIME;
 }
-static const char _data_FX_MODE_FIRE_2012[] PROGMEM = "Fire 2012@Cooling,Spark rate,,,Boost;;!;1;sx=64,ix=160,m12=1"; // bars
+static const char _data_FX_MODE_FIRE_2012[] PROGMEM = "Fire 2012@Cooling,Spark rate,,2D Blur,Boost;;!;1;sx=64,ix=160,m12=1,c2=128"; // bars
 
 
 // ColorWavesWithPalettes by Mark Kriegsman: https://gist.github.com/kriegsman/8281905786e8b2632aeb
@@ -2347,31 +2350,41 @@ uint16_t mode_meteor() {
   unsigned counter = strip.now * ((SEGMENT.speed >> 2) +8);
   uint16_t in = counter * SEGLEN >> 16;
 
-  const int max = SEGMENT.palette==5 || !SEGMENT.check1 ? 240 : 255;
+  const int max = SEGMENT.palette==5 ? 239 : 255;  // "* Colors only" palette blends end with start
   // fade all leds to colors[1] in LEDs one step
   for (int i = 0; i < SEGLEN; i++) {
     if (random8() <= 255 - SEGMENT.intensity) {
-      byte meteorTrailDecay = 162 + random8(92);
+      int meteorTrailDecay = 128 + random8(127);
       trail[i] = scale8(trail[i], meteorTrailDecay);
-      uint32_t col = SEGMENT.check1 ? SEGMENT.color_from_palette(i, true, false, 0, trail[i]) : SEGMENT.color_from_palette(trail[i], false, true, 255);
+      int index = trail[i];
+      int idx = 255;
+      int bri = SEGMENT.palette==35 || SEGMENT.palette==36 ? 255 : trail[i];
+      if (!SEGMENT.check1) {
+        idx = 0;
+        index = map(i,0,SEGLEN,0,max);
+        bri = trail[i];
+      }
+      uint32_t col = SEGMENT.color_from_palette(index, false, false, idx, bri);  // full brightness for Fire
       SEGMENT.setPixelColor(i, col);
     }
   }
 
   // draw meteor
   for (unsigned j = 0; j < meteorSize; j++) {
-    unsigned index = in + j;
-    if (index >= SEGLEN) {
-      index -= SEGLEN;
+    int index = (in + j) % SEGLEN;
+    int idx = 255;
+    int i = trail[index] = max;
+    if (!SEGMENT.check1) {
+      i = map(index,0,SEGLEN,0,max);
+      idx = 0;
     }
-    trail[index] = max;
-    uint32_t col = SEGMENT.check1 ? SEGMENT.color_from_palette(index, true, false, 0, trail[index]) : SEGMENT.color_from_palette(trail[index], false, true, 255);
+    uint32_t col = SEGMENT.color_from_palette(i, false, false, idx, 255); // full brightness
     SEGMENT.setPixelColor(index, col);
   }
 
   return FRAMETIME;
 }
-static const char _data_FX_MODE_METEOR[] PROGMEM = "Meteor@!,Trail,,,,Gradient;;!;1";
+static const char _data_FX_MODE_METEOR[] PROGMEM = "Meteor@!,Trail,,,,Gradient;!;!;1";
 
 
 // smooth meteor effect
@@ -4875,7 +4888,7 @@ uint16_t mode_2DBlackHole(void) {            // By: Stepko https://editor.soulma
   // central white dot
   SEGMENT.setPixelColorXY(cols/2, rows/2, WHITE);
   // blur everything a bit
-  SEGMENT.blur(16);
+  SEGMENT.blur(cols*rows > 100 ? 16 : 0);
 
   return FRAMETIME;
 } // mode_2DBlackHole()
@@ -5671,8 +5684,7 @@ uint16_t mode_2Dsquaredswirl(void) {            // By: Mark Kriegsman. https://g
   const uint8_t kBorderWidth = 2;
 
   SEGMENT.fadeToBlackBy(24);
-  uint8_t blurAmount = SEGMENT.custom3>>1; // reduced resolution slider
-  SEGMENT.blur(blurAmount);
+  SEGMENT.blur(SEGMENT.custom3>>1);
 
   // Use two out-of-sync sine waves
   int i = beatsin8(19, kBorderWidth, cols-kBorderWidth);
@@ -6461,7 +6473,7 @@ uint16_t mode_2DWaverly(void) {
       SEGMENT.addPixelColorXY((cols - 1) - i, (rows - 1) - j, ColorFromPalette(SEGPALETTE, map(j, 0, thisMax, 250, 0), 255, LINEARBLEND));
     }
   }
-  SEGMENT.blur(16);
+  SEGMENT.blur(cols*rows > 100 ? 16 : 0);
 
   return FRAMETIME;
 } // mode_2DWaverly()
@@ -7447,7 +7459,7 @@ uint16_t mode_2DGEQ(void) { // By Will Tatam. Code reduction by Ewoud Wijma.
   if ((fadeoutDelay <= 1 ) || ((SEGENV.call % fadeoutDelay) == 0)) SEGMENT.fadeToBlackBy(SEGMENT.speed);
 
   for (int x=0; x < cols; x++) {
-    uint8_t  band       = map(x, 0, cols-1, 0, NUM_BANDS - 1);
+    uint8_t  band       = map(x, 0, cols, 0, NUM_BANDS);
     if (NUM_BANDS < 16) band = map(band, 0, NUM_BANDS - 1, 0, 15); // always use full range. comment out this line to get the previous behaviour.
     band = constrain(band, 0, 15);
     unsigned colorIndex = band * 17;

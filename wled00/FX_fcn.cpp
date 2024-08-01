@@ -1204,6 +1204,7 @@ void WS2812FX::finalizeInit(void) {
   // for the lack of better place enumerate ledmaps here
   // if we do it in json.cpp (serializeInfo()) we are getting flashes on LEDs
   // unfortunately this means we do not get updates after uploads
+  // the other option is saving UI settings which will cause enumeration
   enumerateLedmaps();
 
   _hasWhiteChannel = _isOffRefreshRequired = false;
@@ -1214,8 +1215,9 @@ void WS2812FX::finalizeInit(void) {
     const unsigned defDataPins[] = {DATA_PINS};
     const unsigned defCounts[] = {PIXEL_COUNTS};
     const unsigned defNumPins = ((sizeof defDataPins) / (sizeof defDataPins[0]));
-    const unsigned defNumCounts = ((sizeof defCounts)   / (sizeof defCounts[0]));
-    const unsigned defNumBusses = defNumPins > defNumCounts && defNumCounts > 1 && defNumPins%defNumCounts == 0 ? defNumCounts : defNumPins;
+    const unsigned defNumCounts = ((sizeof defCounts) / (sizeof defCounts[0]));
+    // if number of pins is divisible by counts, use number of counts to determine number of buses, otherwise use pins
+    const unsigned defNumBusses = defNumPins > defNumCounts && defNumPins%defNumCounts == 0 ? defNumCounts : defNumPins;
     const unsigned pinsPerBus = defNumPins / defNumBusses;
     unsigned prevLen = 0;
     for (unsigned i = 0; i < defNumBusses && i < WLED_MAX_BUSSES+WLED_MIN_VIRTUAL_BUSSES; i++) {
@@ -1228,9 +1230,10 @@ void WS2812FX::finalizeInit(void) {
         while (pinManager.isPinAllocated(defPin[0]) && defPin[0] < WLED_NUM_PINS) defPin[0]++;
       }
       unsigned start = prevLen;
+      // if we have less counts than pins and they do not align, use last known count to set current count
       unsigned count = defCounts[(i < defNumCounts) ? i : defNumCounts -1];
       prevLen += count;
-      BusConfig defCfg = BusConfig(DEFAULT_LED_TYPE, defPin, start, count, DEFAULT_LED_COLOR_ORDER, false, 0, RGBW_MODE_MANUAL_ONLY);
+      BusConfig defCfg = BusConfig(DEFAULT_LED_TYPE, defPin, start, count, DEFAULT_LED_COLOR_ORDER, false, 0, RGBW_MODE_MANUAL_ONLY, 0, useGlobalLedBuffer);
       if (BusManager::add(defCfg) == -1) break;
     }
   }
@@ -1247,11 +1250,12 @@ void WS2812FX::finalizeInit(void) {
     unsigned busEnd = bus->getStart() + bus->getLength();
     if (busEnd > _length) _length = busEnd;
     #ifdef ESP8266
-    if ((!IS_DIGITAL(bus->getType()) || IS_2PIN(bus->getType()))) continue;
-    uint8_t pins[5];
-    if (!bus->getPins(pins)) continue;
-    BusDigital* bd = static_cast<BusDigital*>(bus);
-    if (pins[0] == 3) bd->reinit();
+    // why do we need to reinitialise GPIO3???
+    //if ((!IS_DIGITAL(bus->getType()) || IS_2PIN(bus->getType()))) continue;
+    //uint8_t pins[5];
+    //if (!bus->getPins(pins)) continue;
+    //BusDigital* bd = static_cast<BusDigital*>(bus);
+    //if (pins[0] == 3) bd->reinit();
     #endif
   }
 
@@ -1704,8 +1708,6 @@ void WS2812FX::printSize() {
   DEBUG_PRINTF_P(PSTR("Modes: %d*%d=%uB\n"), sizeof(mode_ptr), _mode.size(), (_mode.capacity()*sizeof(mode_ptr)));
   DEBUG_PRINTF_P(PSTR("Data: %d*%d=%uB\n"), sizeof(const char *), _modeData.size(), (_modeData.capacity()*sizeof(const char *)));
   DEBUG_PRINTF_P(PSTR("Map: %d*%d=%uB\n"), sizeof(uint16_t), (int)customMappingSize, customMappingSize*sizeof(uint16_t));
-  size = getLengthTotal();
-  if (useGlobalLedBuffer) DEBUG_PRINTF_P(PSTR("Buffer: %d*%u=%uB\n"), sizeof(CRGB), size, size*sizeof(CRGB));
 }
 #endif
 
@@ -1769,13 +1771,15 @@ bool WS2812FX::deserializeMap(uint8_t n) {
   bool isFile = WLED_FS.exists(fileName);
 
   customMappingSize = 0; // prevent use of mapping if anything goes wrong
+  currentLedmap = 0;
+  if (n == 0 || isFile) interfaceUpdateCallMode = CALL_MODE_WS_SEND; // schedule WS update (to inform UI)
 
   if (!isFile && n==0 && isMatrix) {
     setUpMatrix();
     return false;
   }
 
-  if (!isFile || !requestJSONBufferLock(7)) return false; // this will trigger setUpMatrix() when called from wled.cpp
+  if (!isFile || !requestJSONBufferLock(7)) return false;
 
   if (!readObjectFromFile(fileName, nullptr, pDoc)) {
     DEBUG_PRINT(F("ERROR Invalid ledmap in ")); DEBUG_PRINTLN(fileName);
@@ -1799,6 +1803,7 @@ bool WS2812FX::deserializeMap(uint8_t n) {
     if (!map.isNull() && map.size()) {  // not an empty map
       customMappingSize = min((unsigned)map.size(), (unsigned)getLengthTotal());
       for (unsigned i=0; i<customMappingSize; i++) customMappingTable[i] = (uint16_t) (map[i]<0 ? 0xFFFFU : map[i]);
+      currentLedmap = n;
     }
   } else {
     DEBUG_PRINTLN(F("ERROR LED map allocation error."));

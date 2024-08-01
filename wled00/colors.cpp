@@ -9,7 +9,7 @@
  */
 uint32_t color_blend(uint32_t color1, uint32_t color2, uint16_t blend, bool b16) {
   if(blend == 0)   return color1;
-  uint16_t blendmax = b16 ? 0xFFFF : 0xFF;
+  unsigned blendmax = b16 ? 0xFFFF : 0xFF;
   if(blend == blendmax) return color2;
   uint8_t shift = b16 ? 16 : 8;
 
@@ -52,7 +52,7 @@ uint32_t color_add(uint32_t c1, uint32_t c2, bool fast)
     uint32_t g = G(c1) + G(c2);
     uint32_t b = B(c1) + B(c2);
     uint32_t w = W(c1) + W(c2);
-    uint16_t max = r;
+    unsigned max = r;
     if (g > max) max = g;
     if (b > max) max = b;
     if (w > max) max = w;
@@ -208,13 +208,13 @@ CRGBPalette16 generateRandomPalette(void)  //generate fully random palette
 
 void colorHStoRGB(uint16_t hue, byte sat, byte* rgb) //hue, sat to rgb
 {
-  float h = ((float)hue)/65535.0f;
+  float h = ((float)hue)/10922.5f; // hue*6/65535
   float s = ((float)sat)/255.0f;
-  int   i = floorf(h*6);
-  float f = h * 6.0f - i;
+  int   i = int(h);
+  float f = h - i;
   int   p = int(255.0f * (1.0f-s));
-  int   q = int(255.0f * (1.0f-f*s));
-  int   t = int(255.0f * (1.0f-(1.0f-f)*s));
+  int   q = int(255.0f * (1.0f-s*f));
+  int   t = int(255.0f * (1.0f-s*(1.0f-f)));
   p = constrain(p, 0, 255);
   q = constrain(q, 0, 255);
   t = constrain(t, 0, 255);
