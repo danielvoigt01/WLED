@@ -6483,11 +6483,6 @@ static const char _data_FX_MODE_2DWAVERLY[] PROGMEM = "Waverly@Amplification,Sen
 
 #endif // WLED_DISABLE_2D
 
-// float version of map()
-static float mapf(float x, float in_min, float in_max, float out_min, float out_max){
-  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
-}
-
 // Gravity struct requited for GRAV* effects
 typedef struct Gravity {
   int    topLED;
@@ -7805,18 +7800,23 @@ static const char _data_RESERVED[] PROGMEM = "RSVD";
 // add (or replace reserved) effect mode and data into vector
 // use id==255 to find unallocated gaps (with "Reserved" data string)
 // if vector size() is smaller than id (single) data is appended at the end (regardless of id)
-void WS2812FX::addEffect(uint8_t id, mode_ptr mode_fn, const char *mode_name) {
+// return the actual id used for the effect or 255 if the add failed.
+uint8_t WS2812FX::addEffect(uint8_t id, mode_ptr mode_fn, const char *mode_name) {
   if (id == 255) { // find empty slot
     for (size_t i=1; i<_mode.size(); i++) if (_modeData[i] == _data_RESERVED) { id = i; break; }
   }
   if (id < _mode.size()) {
-    if (_modeData[id] != _data_RESERVED) return; // do not overwrite alerady added effect
+    if (_modeData[id] != _data_RESERVED) return 255; // do not overwrite an already added effect
     _mode[id]     = mode_fn;
     _modeData[id] = mode_name;
-  } else {
+    return id;
+  } else if(_mode.size() < 255) { // 255 is reserved for indicating the effect wasn't added
     _mode.push_back(mode_fn);
     _modeData.push_back(mode_name);
     if (_modeCount < _mode.size()) _modeCount++;
+    return _mode.size() - 1;
+  } else {
+    return 255; // The vector is full so return 255
   }
 }
 
